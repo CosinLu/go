@@ -8,15 +8,25 @@ import (
     "github.com/gorilla/websocket"
     "time"
     "net/http"
+    "log"
 )
 
-var upgrade = websocket.Upgrader{
+var upgrader = websocket.Upgrader{
     ReadBufferSize:   1024,
     WriteBufferSize:  1024,
     HandshakeTimeout: 5 * time.Second,
     CheckOrigin: func(r *http.Request) bool {
         return true
     },
+}
+
+func UpgradeSocket(w http.ResponseWriter, r *http.Request) {
+
+    ws, err := upgrader.Upgrade(w, r, nil)
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println("升级socket",ws)
 }
 
 func main(){
