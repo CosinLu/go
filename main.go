@@ -19,67 +19,88 @@ var upgrader = websocket.Upgrader{
     },
 }
 
-func testhandler(w http.ResponseWriter, r *http.Request) {
+type Hub struct {
+    clients map[*Client]bool
+    broadcast chan []byte
+    register chan *Client
+    unregister chan *Client
+}
+
+type Client struct {
+    hub *Hub
+    conn *websocket.Conn
+    send chan []byte
+}
+
+var manager = Hub{
+    broadcast:  make(chan []byte),
+    register:   make(chan *Client),
+    unregister: make(chan *Client),
+    clients:    make(map[*Client]bool),
+}
+
+func (h *Hub) run() {
+	for {
+		select {
+        case client := <-h.register://有新链接加入
+            fmt.Println("有新链接加入",client)
+			h.clients[client] = true
+		case client := <-h.unregister://有链接断开
+			if _, ok := h.clients[client]; ok {
+				delete(h.clients, client)
+				close(client.send)
+			}
+		case message := <-h.broadcast://有新消息
+			for client := range h.clients {
+				select {
+				case client.send <- message:
+				default:
+					close(client.send)
+					delete(h.clients, client)
+				}
+			}
+		}
+	}
+}
+
+func res(hub *Hub,w http.ResponseWriter,r *http.Request) {
     ws, err := upgrader.Upgrade(w, r, nil)
     if err != nil {
         fmt.Println("错误",err)
         log.Fatal(err)
     }
     defer ws.Close()
-    fmt.Println("进来了")
-    for {
-        t, p, err := ws.ReadMessage()
-        if err != nil {
-            ws.Close()
-            break
-        }
-        fmt.Println("甚至都打印到数据了",t,"数据",string(p),"错误",err)
-        ws.WriteJSON(string(p))
-        //manager.broadcast <- jsonMessage
-    }
-}
-
-func res(w http.ResponseWriter,r *http.Request) {
-    ws, err := upgrader.Upgrade(w, r, nil)
-    if err != nil {
-        fmt.Println("错误",err)
-        log.Fatal(err)
-    }
-    defer ws.Close()
-    fmt.Println("准备返回数据进来了")
-    err = ws.WriteJSON("可以的")
-    log.Println(err)
-}
-
-var a chan string
-func ready(s string) {
-    fmt.Println("现在的channel为",s)
-    a <- s
+    client := &Client{hub:hub,conn:ws,send:make(chan []byte,256)}
+    client.hub.register <- client
+	for {
+		_, message, err := client.conn.ReadMessage()
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("error: %v", err)
+			}
+			break
+		}
+		client.hub.broadcast <- message
+        fmt.Println("数据",string(message),err)
+        fmt.Println("链接",hub.clients)
+	}
 }
 
 func main(){
-    a = make(chan string)
-    go ready("cosin")
-    i := <- a
-    fmt.Println("信道",i)
-	redis_example()
     defer func(){
         if err := recover();err != nil{
             fmt.Println("panic is success",err)
         }
     }()
+    hub := &manager
+    go hub.run()
     mux := http.NewServeMux()
-    mux.HandleFunc("/test",testhandler)
-    mux.HandleFunc("/res",res)
+	mux.HandleFunc("/res", func(w http.ResponseWriter, r *http.Request) {
+        fmt.Println("???")
+		res(hub, w, r)
+	})
     log.Println("Listening...")
     http.ListenAndServe(":8800",mux)
-}
-
-//函数作为返回值
-func test() func(int,int) int{
-    return func(x,y int) int {
-        return x + y
-    }
 }
 
 func redis_example(){

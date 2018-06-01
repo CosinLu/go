@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Sample of websocket with golang</title>
+    <script src="http://apps.bdimg.com/libs/jquery/2.1.4/jquery.min.js"></script>
+
+    <script>
+        $(function() {
+            var ws = new WebSocket('ws://127.0.0.1:8800/res');
+
+            ws.onopen = function(e) {
+                $('<li>').text("connected").appendTo($ul);
+                console.log("链接")
+                console.log(e)
+                ws.send("name is cosin")
+            }
+
+            ws.onmessage = function(e) {
+                $('<li>').text(event.data).appendTo($ul);
+            };
+            ws.onerror = function(err) {
+                console.log('有个错误')
+                console.log(err)
+            }
+            var $ul = $('#msg-list');
+        });
+    </script>
+</head>
+
+<body>
+    <ul id="msg-list"></ul>
+</body>
+
+</html>
