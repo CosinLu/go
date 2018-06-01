@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
     "github.com/garyburd/redigo/redis"//redis
-    "database/sql"
     _"github.com/go-sql-driver/mysql"
     "github.com/gorilla/websocket"
     "time"
@@ -20,28 +19,60 @@ var upgrader = websocket.Upgrader{
     },
 }
 
-func UpgradeSocket(w http.ResponseWriter, r *http.Request) {
-
+func testhandler(w http.ResponseWriter, r *http.Request) {
     ws, err := upgrader.Upgrade(w, r, nil)
     if err != nil {
+        fmt.Println("错误",err)
         log.Fatal(err)
     }
-    fmt.Println("升级socket",ws)
+    defer ws.Close()
+    fmt.Println("进来了")
+    for {
+        t, p, err := ws.ReadMessage()
+        if err != nil {
+            ws.Close()
+            break
+        }
+        fmt.Println("甚至都打印到数据了",t,"数据",string(p),"错误",err)
+        ws.WriteJSON(string(p))
+        //manager.broadcast <- jsonMessage
+    }
+}
+
+func res(w http.ResponseWriter,r *http.Request) {
+    ws, err := upgrader.Upgrade(w, r, nil)
+    if err != nil {
+        fmt.Println("错误",err)
+        log.Fatal(err)
+    }
+    defer ws.Close()
+    fmt.Println("准备返回数据进来了")
+    err = ws.WriteJSON("可以的")
+    log.Println(err)
+}
+
+var a chan string
+func ready(s string) {
+    fmt.Println("现在的channel为",s)
+    a <- s
 }
 
 func main(){
+    a = make(chan string)
+    go ready("cosin")
+    i := <- a
+    fmt.Println("信道",i)
+	redis_example()
     defer func(){
         if err := recover();err != nil{
-            fmt.Println("panic is success")
+            fmt.Println("panic is success",err)
         }
     }()
-	redis_example()
-    //函数作为返回值
-    add := test()(1,3)
-    fmt.Println("现在的值是",add)
-    func (s string) {
-        fmt.Println("现在的值是",s)
-    }("hello world")
+    mux := http.NewServeMux()
+    mux.HandleFunc("/test",testhandler)
+    mux.HandleFunc("/res",res)
+    log.Println("Listening...")
+    http.ListenAndServe(":8800",mux)
 }
 
 //函数作为返回值
@@ -51,60 +82,21 @@ func test() func(int,int) int{
     }
 }
 
-type UserRes struct{
-    nick string
-    phone string
-}
-
 func redis_example(){
     c, err := redis.Dial("tcp", "127.0.0.1:6379")
     checkErr(err)
     defer c.Close()
+    c.Do("auth","cosin")
     /* _, err = c.Do("SET", "mykey", "superWang")
     if err != nil {
         fmt.Println("redis set failed:", err)
     } */
-    c.Do("auth","cosin")
     username, err := redis.String(c.Do("GET", "author"))
     if err != nil {
         fmt.Println("redis get failed:", err)
     } else {
         fmt.Printf("Get mykey: %v \n", username)
     }
-
-    db,err := sql.Open("mysql","root:@(127.0.0.1:3306)/test?charset=utf8")
-    if err != nil{
-        fmt.Printf("databases connected error:%v\n",err)
-    }
-    defer db.Close()
-    //插入数据
-    /* stmt,err := db.Prepare("INSERT user SET nick = ?,phone = ?")
-    if err != nil{
-        fmt.Printf("insert data error:%v\n",err)
-    }   
-    res,err := stmt.Exec("cosin","13730444340")
-    if err != nil {
-        fmt.Printf("bind data error:%v\n",err)
-    }else{
-        id,err := res.LastInsertId()
-        checkErr(err)
-        fmt.Printf("insert data id is %d\n",id)
-    } */
-    users := UserRes{}
-    //查询数据
-    /* stmt,err := db.Prepare("SELECT nick,phone FROM user WHERE id = ?")
-    checkErr(err)
-    fmt.Print(res)
-    res,err := stmt.Query(1)
-    checkErr(err)
-    for res.Next(){
-        err = res.Scan(&users.nick,&users.phone)
-        checkErr(err)
-        fmt.Printf("nick is %s and phone is %s\n",users.nick,users.phone)
-    } */
-    err = db.QueryRow("SELECT nick,phone FROM user where id = ?",1).Scan(&users.nick,&users.phone)
-    checkErr(err)
-    fmt.Printf("nick is %s and phone is %s\n",users.nick,users.phone)
 }
 
 func checkErr(err error){
