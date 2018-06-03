@@ -14,7 +14,12 @@
                 $('<li>').text("connected").appendTo($ul);
                 console.log("链接")
                 console.log(e)
-                ws.send("name is cosin")
+                var data = {
+                    event:'create',
+                    roomid:145
+                }
+                console.log(data)
+                ws.send(JSON.stringify(data))
             }
 
             ws.onmessage = function(e) {
