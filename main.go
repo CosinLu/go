@@ -1,6 +1,7 @@
 package main
 
 import (
+	// "encoding/json"
 	"fmt"
     _"github.com/go-sql-driver/mysql"
     "github.com/gorilla/websocket"
@@ -11,17 +12,10 @@ import (
 )
 
 const (
-    // Time allowed to write a message to the peer.
-    writeWait = 10 * time.Second
-
-    // Time allowed to read the next pong message from the peer.
-    pongWait = 60 * time.Second
-
-    // Send pings to peer with this period. Must be less than pongWait.
-    pingPeriod = (pongWait * 9) / 10
-
-    // Maximum message size allowed from peer.
-    maxMessageSize = 512
+    writeWait = 10 * time.Second    // Time allowed to write a message to the peer.
+    pongWait = 60 * time.Second     // Time allowed to read the next pong message from the peer.
+    pingPeriod = (pongWait * 9) / 10    // Send pings to peer with this period. Must be less than pongWait.
+    maxMessageSize = 512    // Maximum message size allowed from peer.
 )
 
 //设定一个解析数据请求的格式
@@ -47,7 +41,7 @@ type Hub struct {
     broadcast chan requestData
     register chan *Client
     unregister chan *Client
-    rooms map[int][]int
+    rooms map[int][]*websocket.Conn
 }
 
 type Client struct {
@@ -61,7 +55,7 @@ var manager = Hub{
     register: make(chan *Client),
     unregister: make(chan *Client),
     clients: make(map[*Client]bool),
-    rooms: make(map[int][]int),
+    rooms: make(map[int][]*websocket.Conn),
 }
 
 func (h *Hub) run() {
@@ -77,7 +71,7 @@ func (h *Hub) run() {
 				close(client.send)
 			}
 		case message := <-h.broadcast://有新消息
-		fmt.Println("有数据的",message,reflect.TypeOf(message))
+            fmt.Println("有数据的",message)
 			for client := range h.clients {
 				select {
 				case client.send <- message:
@@ -128,7 +122,6 @@ func (c *Client) readPump() {
         c.conn.Close()
     }()
     c.conn.SetReadLimit(maxMessageSize)
-    c.conn.SetReadDeadline(time.Now().Add(pongWait))
     c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
     for {
         var request requestData
@@ -140,11 +133,61 @@ func (c *Client) readPump() {
             }
             break
         }
-        if err != nil {
-            fmt.Println("读取json数据失败",err)
+        fmt.Println("循环读取数据",request,reflect.TypeOf(request))
+        //判断发送的事件
+        switch request.Event {
+            case "create":  //创建一个回家的连接
+                if _,ok := c.hub.rooms[request.RoomId];!ok {
+                    c.hub.rooms[request.RoomId] = []*websocket.Conn{}
+                }
+            case "location": //用户持续上报位置
+                
+            case "join" : //有人加入查看用户上报回家位置
+                if _,ok := c.hub.rooms[request.RoomId];ok {
+                    c.hub.rooms[request.RoomId] = append(c.hub.rooms[request.RoomId],c.conn)
+                    type ColorGroup struct { 
+                        ID     int 
+                        Name   string 
+                    } 
+                    group := ColorGroup { 
+                        ID :     request.Uid , 
+                        Name :   "Reds" , 
+                    } 
+                    c.conn.WriteJSON(group)
+                }else{
+                    type ColorGroup struct { 
+                        ID     int 
+                        Name   string 
+                    } 
+                    group := ColorGroup { 
+                        ID :     request.Uid , 
+                        Name :   "没有该房间" , 
+                    } 
+                    c.conn.WriteJSON(group)
+                }
+            case "getLocation": //有人主动查看当前用户的位置
+
+            case "leave": //有人退出查看用户实时推送位置
+
+            case "end": //用户主动结束上报回家事件
+                if _,ok := c.hub.rooms[request.RoomId];ok {
+                    arr := c.hub.rooms[request.RoomId]
+                    fmt.Println("查看一下当前房间的连接数",arr)
+                    for _,v := range arr {
+                        type ColorGroup struct { 
+                            ID     int 
+                            Name   string 
+                        } 
+                        group := ColorGroup { 
+                            ID :     request.Uid , 
+                            Name :   "收到了吗" , 
+                        } 
+                        v.WriteJSON(group)
+                    }
+                }
         }
-        fmt.Println("循环读取数据",request,request.Event,err,reflect.TypeOf(request))
-        c.hub.broadcast <- request
+        // c.hub.broadcast <- request
+        fmt.Println("查看一下现在有多少个房间",c.hub.rooms)
     }
 }
 
