@@ -18,13 +18,23 @@ const (
     maxMessageSize = 512    // Maximum message size allowed from peer.
 )
 
-//设定一个解析数据请求的格式
+//解析数据请求
 type requestData struct {
     Event string `json:"event"`
     RoomId int `json:"roomid"`
     Uid int `json:"uid"`
     Lon string `json:"lon"`
     Lat string `json:"lat"`
+}
+
+//返回数据格式
+type responseData struct {
+    Event string `json:"event"`
+    RoomId int `json:"roomid"`
+    Uid int `json:"uid"`
+    Lon string `json:"lon"`
+    Lat string `json:"lat"`
+    Msg string `json:"msg"`
 }
 
 var upgrader = websocket.Upgrader{
@@ -41,7 +51,8 @@ type Hub struct {
     broadcast chan requestData
     register chan *Client
     unregister chan *Client
-    rooms map[int][]*websocket.Conn
+    // rooms map[int][]map[string][]*websocket.Conn
+    rooms map[int][]map[string][]map[int]*websocket.Conn
 }
 
 type Client struct {
@@ -55,7 +66,7 @@ var manager = Hub{
     register: make(chan *Client),
     unregister: make(chan *Client),
     clients: make(map[*Client]bool),
-    rooms: make(map[int][]*websocket.Conn),
+    rooms: make(map[int][]map[string][]map[int]*websocket.Conn),
 }
 
 func (h *Hub) run() {
@@ -118,6 +129,7 @@ func main(){
 
 func (c *Client) readPump() {
     defer func() {
+        fmt.Println("要断了是吗")
         c.hub.unregister <- c
         c.conn.Close()
     }()
@@ -138,56 +150,76 @@ func (c *Client) readPump() {
         switch request.Event {
             case "create":  //创建一个回家的连接
                 if _,ok := c.hub.rooms[request.RoomId];!ok {
-                    c.hub.rooms[request.RoomId] = []*websocket.Conn{}
+                    // c.hub.rooms[request.RoomId] = append(c.hub.rooms[request.RoomId],map[string][]*websocket.Conn{"master":[]*websocket.Conn{c.conn}})
+                    linkArr := make(map[string][]map[int]*websocket.Conn)
+                    link := make(map[int]*websocket.Conn)
+                    link[request.Uid] = c.conn
+                    linkArr["master"] = append(linkArr["master"],link)
+                    c.hub.rooms[request.RoomId] = append(c.hub.rooms[request.RoomId],linkArr)
                 }
             case "location": //用户持续上报位置
-                
-            case "join" : //有人加入查看用户上报回家位置
-                if _,ok := c.hub.rooms[request.RoomId];ok {
-                    c.hub.rooms[request.RoomId] = append(c.hub.rooms[request.RoomId],c.conn)
-                    type ColorGroup struct { 
-                        ID     int 
-                        Name   string 
-                    } 
-                    group := ColorGroup { 
-                        ID :     request.Uid , 
-                        Name :   "Reds" , 
-                    } 
-                    c.conn.WriteJSON(group)
-                }else{
-                    type ColorGroup struct { 
-                        ID     int 
-                        Name   string 
-                    } 
-                    group := ColorGroup { 
-                        ID :     request.Uid , 
-                        Name :   "没有该房间" , 
-                    } 
-                    c.conn.WriteJSON(group)
-                }
-            case "getLocation": //有人主动查看当前用户的位置
-
-            case "leave": //有人退出查看用户实时推送位置
-
-            case "end": //用户主动结束上报回家事件
                 if _,ok := c.hub.rooms[request.RoomId];ok {
                     arr := c.hub.rooms[request.RoomId]
                     fmt.Println("查看一下当前房间的连接数",arr)
                     for _,v := range arr {
-                        type ColorGroup struct { 
-                            ID     int 
-                            Name   string 
+                        type sendLocation struct { 
+                            lat string 
+                            lon string 
                         } 
-                        group := ColorGroup { 
-                            ID :     request.Uid , 
-                            Name :   "收到了吗" , 
-                        } 
-                        v.WriteJSON(group)
+                        location := sendLocation { 
+                            lat : request.Lat , 
+                            lon : request.Lon, 
+                        }
+                        for _,vv := range v["other"] {
+                            vv[].WriteJSON(location)
+                        }
                     }
                 }
+            case "join" : //有人加入查看用户上报回家位置
+                if _,ok := c.hub.rooms[request.RoomId];ok {
+                    // c.hub.rooms[request.RoomId] = append(c.hub.rooms[request.RoomId],map[string][]*websocket.Conn{"other":[]*websocket.Conn{c.conn}})
+                    linkArr := make(map[string][]map[int]*websocket.Conn)
+                    link := make(map[int]*websocket.Conn)
+                    link[request.Uid] = c.conn
+                    linkArr["viewer"] = append(linkArr["viewer"],link)
+                    c.hub.rooms[request.RoomId] = append(c.hub.rooms[request.RoomId],linkArr)
+                }else{
+                    response := responseData { 
+                        Event : "error", 
+                        Msg : "没有该房间", 
+                    } 
+                    c.conn.WriteJSON(response)
+                }
+            case "getLocation": //有人主动查看当前用户的位置
+                if _,ok := c.hub.rooms[request.RoomId];ok {
+                    //检查回家人是否还在保持连接状态
+                    if master,ok := c.hub.rooms[request.RoomId][0]["master"];ok {
+                        if len(master) < 1 {
+                            response := responseData { 
+                                Event : "error", 
+                                Msg : "糟糕,你的小伙伴失联了,要不要电话联系一下?", 
+                            } 
+                            c.conn.WriteJSON(response)
+                        }else{
+                            response := responseData { 
+                                Event : "getLocation", 
+                            } 
+                            master[0][request.Uid].WriteJSON(response)
+                        }
+                    }else{
+                        response := responseData { 
+                            Event : "error", 
+                            Msg : "咦?是不是来错地方了?", 
+                        } 
+                        c.conn.WriteJSON(response)
+                    }
+                }
+            case "leave": //有人退出查看用户实时推送位置
+
+            case "end": //用户主动结束上报回家事件
         }
         // c.hub.broadcast <- request
-        fmt.Println("查看一下现在有多少个房间",c.hub.rooms)
+        fmt.Println("查看一下现在有多少个房间",c.hub.rooms,"看看看现在的主播",c.hub.rooms[request.RoomId][0]["master"])
     }
 }
 
