@@ -1,7 +1,6 @@
 package main
 
 import (
-	// "encoding/json"
 	"fmt"
     _"github.com/go-sql-driver/mysql"
     "github.com/gorilla/websocket"
@@ -38,9 +37,8 @@ type responseData struct {
     Error interface{} `json:"error"`
 }
 
-
 type roomNumber struct {
-	master map[int]*websocket.Conn
+	master *websocket.Conn
 	viewer []map[int]*websocket.Conn
 }
 
@@ -58,7 +56,6 @@ type Hub struct {
     broadcast chan requestData
     register chan *Client
     unregister chan *Client
-    // rooms map[int][]map[string][]map[int]*websocket.Conn
     rooms map[int]roomNumber
 }
 
@@ -73,7 +70,6 @@ var manager = Hub{
     register: make(chan *Client),
     unregister: make(chan *Client),
     clients: make(map[*Client]bool),
-    // rooms: make(map[int][]map[string][]map[int]*websocket.Conn),
     rooms: make(map[int]roomNumber),
 }
 
@@ -88,18 +84,6 @@ func (h *Hub) run() {
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
 				close(client.send)
-			}
-		case message := <-h.broadcast://有新消息
-            fmt.Println("有数据的",message)
-			for client := range h.clients {
-				select {
-				case client.send <- message:
-				    fmt.Println("检查发送的消息是什么",message)
-				default:
-				    fmt.Println("会每次都关闭吗")
-					close(client.send)
-					delete(h.clients, client)
-				}
 			}
 		}
 	}
@@ -160,47 +144,35 @@ func (c *Client) readPump() {
             }
             break
         }
-        //判断发送的事件
-        // linkArr := make(map[string][]map[int]*websocket.Conn,0)
-        // link := make(map[int]*websocket.Conn)
         switch request.Event {
-            case "create":  //创建一个回家的连接map[int]map[string][]map[int]*websocket.Conn
+            case "create":  //创建一个回家的连接
                 if _,ok := c.hub.rooms[request.RoomId];!ok {
-                    /* link[request.Flag] = c.conn
-                    linkArr["master"] = append(linkArr["master"],link)
-                    c.hub.rooms[request.RoomId] = append(c.hub.rooms[request.RoomId],linkArr) */
-                    master := map[int]*websocket.Conn{request.Flag:c.conn}
-                    room := roomNumber{master:master}
+                    room := roomNumber{master:c.conn}
                     c.hub.rooms[request.RoomId] = room
                 }
             case "location": //用户持续上报位置
-                /* if rooms,ok := c.hub.rooms[request.RoomId];ok {
+                if rooms,ok := c.hub.rooms[request.RoomId];ok {
                     fmt.Println("查看一下当前房间的连接数",rooms)
-                    for _,v := range rooms {
-                        if viewer,ok := v["other"];ok {
+                    for _,viewer := range rooms.viewer {
+                        for _,v := range viewer {
                             response := responseData { 
                                 Event : "location",
                                 Lat : request.Lat , 
                                 Lon : request.Lon, 
                             }
-                            fmt.Println(response,"循环里面的观众结构",viewer)
-                            viewer[0][request.Flag].WriteJSON(response)
+                            v.WriteJSON(response)
                         }
-                        fmt.Println("查看每个链接的效果",v,"返回的数据")
+                        fmt.Println("查看每个链接的效果",viewer,"返回的数据")
                     }
-                } */
+                }
             case "join" : //有人加入查看用户上报回家位置map[int][]map[string][]map[int]*websocket.Conn
                 if _,ok := c.hub.rooms[request.RoomId];ok {
-                    /* link[request.Flag] = c.conn
-                    linkArr["other"] = append(linkArr["other"],link)
-                    c.hub.rooms[request.RoomId] = append(c.hub.rooms[request.RoomId],linkArr) */
-                    viewers := c.hub.rooms[request.RoomId].viewer
                     viewer := make(map[int]*websocket.Conn)
+                    viewers := c.hub.rooms[request.RoomId].viewer
                     viewer[request.Flag] = c.conn
                     viewers = append(viewers,viewer)
                     master := c.hub.rooms[request.RoomId].master
                     c.hub.rooms[request.RoomId] = roomNumber{master:master,viewer:viewers}
-
                 }else{
                     response := responseData { 
                         Event : "error", 
@@ -209,21 +181,14 @@ func (c *Client) readPump() {
                     c.conn.WriteJSON(response)
                 }
             case "getLocation": //有人主动查看当前用户的位置
-                /* if _,ok := c.hub.rooms[request.RoomId];ok {
+                if _,ok := c.hub.rooms[request.RoomId];ok {
                     //检查回家人是否还在保持连接状态
-                    if master,ok := c.hub.rooms[request.RoomId][0]["master"];ok {
-                        if len(master) < 1 {
-                            response := responseData { 
-                                Event : "error", 
-                                Msg : "糟糕,你的小伙伴失联了,要不要电话联系一下?", 
-                            } 
-                            c.conn.WriteJSON(response)
-                        }else{
-                            response := responseData { 
-                                Event : "getLocation", 
-                            } 
-                            master[0][request.Flag].WriteJSON(response)
-                        }
+                    master := c.hub.rooms[request.RoomId].master
+                    if master != nil {
+                        response := responseData { 
+                            Event : "getLocation", 
+                        } 
+                        master.WriteJSON(response)
                     }else{
                         response := responseData { 
                             Event : "error", 
@@ -231,62 +196,40 @@ func (c *Client) readPump() {
                         } 
                         c.conn.WriteJSON(response)
                     }
-                } */
-            case "leave": //有人退出查看用户实时推送位置map[int][] map[string][]map[int]*websocket.Conn
-                /* if viewer,ok := c.hub.rooms[request.RoomId]; ok {
-                    fmt.Println("查看一下当前房间的连接数",viewer)
-                    for k,v := range viewer {
-                        if other,ok := v["other"];ok {
-                            if other[0][request.Flag] == c.conn {
-                                delete(viewer[k],v["other"])
+                }
+            case "leave": //有人退出查看用户实时推送位置
+                if rooms,ok := c.hub.rooms[request.RoomId]; ok {
+                    for _,viewer := range rooms.viewer {
+                        for k,v := range viewer {
+                            if v == c.conn {
+                                delete(viewer,k)
+                                c.hub.unregister <- c 
+                                c.conn.Close()
                             }
                         }
-                        fmt.Println("查看每个链接的效果",v,"返回的数据",k,"...",viewer[k])
+                        fmt.Println("查看当前的观众",viewer)    
                     }
-                } */
+                    fmt.Println("查看每个链接的效果",rooms)
+                }
             case "end": //用户主动结束上报回家事件
+                if rooms,ok := c.hub.rooms[request.RoomId]; ok {
+                    master := rooms.master
+                    if master != nil {
+                        for _,viewer := range rooms.viewer {
+                            for _,v := range viewer {
+                                response := responseData { 
+                                    Event : "end",
+                                }
+                                v.WriteJSON(response)
+                            }
+                        }
+                        c.hub.unregister <- c
+                        c.conn.Close()
+                        delete(c.hub.rooms,request.RoomId)
+                    }
+                    fmt.Println("查看每个链接的效果",rooms)
+                }
         }
-        // c.hub.broadcast <- request
-        fmt.Println("查看一下现在有多少个房间",c.hub.rooms,"看看看现在的主播",c.hub.rooms[request.RoomId])
+        fmt.Println("查看一下现在有多少个房间",c.hub.rooms)
     }
 }
-
-/*func (c *Client) writePump() {
-    ticker := time.NewTicker(pingPeriod)
-    defer func() {
-        ticker.Stop()
-        c.conn.Close()
-    }()
-    for {
-        select {
-        case message, ok := <-c.send:
-            c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-            if !ok {
-                // The hub closed the channel.
-                c.conn.WriteMessage(websocket.CloseMessage, []byte{})
-                return
-            }
-
-            w, err := c.conn.NextWriter(websocket.TextMessage)
-            if err != nil {
-                return
-            }
-            w.Write(message)
-
-            // Add queued chat messages to the current websocket message.
-            n := len(c.send)
-            for i := 0; i < n; i++ {
-                w.Write(<-c.send)
-            }
-
-            if err := w.Close(); err != nil {
-                return
-            }
-        case <-ticker.C:
-            c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-            if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-                return
-            }
-        }
-    }
-}*/
