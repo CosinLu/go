@@ -12,13 +12,6 @@ type RequestData struct {
     Lon string `json:"lon"`
     Lat string `json:"lat"`
 	Flag int `json:"flag"`
-	Token string `json:"token"`
-	Gcid int `json:"gcid"`
-	Gaid int `json:"gaid"`
-	Gwid int `json:"gwid"`
-	NormalTime string `json:"normalTime"`
-	LastTime string `json:"lastTime"`
-	StartLocation string `json:"startLocation"`
 }
 
 //返回数据格式

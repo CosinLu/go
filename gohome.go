@@ -35,58 +35,38 @@ func (c *Client) GohomeHub() {
         }
         switch request.Event {
 			case "create":  //创建一个回家的连接
-				if request.Token != "" {
-					users,e := DecryptToken(request.Token)
-					if !e {
-						user := *users
-						fmt.Println("用户数据",user,user.Id)
-						if _,ok := c.hub.rooms[request.RoomId];!ok {
-							roomMaster := RoomNumber{master:c.conn}
-							c.hub.rooms[request.RoomId] = roomMaster
-							response := ResponseData { 
-								Event : "success",
-								Msg : "创建成功" , 
-							}
-							c.conn.WriteJSON(response)
-						}else {
-							//如果连接存在的话,检查一下是不是主播断掉然后重连的
-							if c.hub.rooms[request.RoomId].master == nil {
-								viewers := c.hub.rooms[request.RoomId].viewer
-								roomMaster := RoomNumber{master:c.conn,viewer:viewers}
-								c.hub.rooms[request.RoomId] = roomMaster
-								response := ResponseData { 
-									Event : "success",
-									Msg : "创建成功" , 
-								}
-								c.conn.WriteJSON(response)
-							}else{
-								response := ResponseData { 
-									Event : "error",
-									Msg : "链接已存在" , 
-								}
-								c.conn.WriteJSON(response)
-							}
-						}
-					}else{
-						c.hub.unregister <- c 
-						c.conn.Close()
-						response := ResponseData { 
-							Event : "needLogin",
-							Msg : "请登录" , 
-						}
-						c.conn.WriteJSON(response)
-					}
-				}else{
-					c.hub.unregister <- c 
-					c.conn.Close()
-					response := ResponseData { 
-						Event : "needLogin",
-						Msg : "请登录" , 
-					}
-					c.conn.WriteJSON(response)
-				}
+                if _,ok := c.hub.rooms[request.RoomId];!ok {
+                    roomMaster := RoomNumber{master:c.conn}
+                    c.hub.rooms[request.RoomId] = roomMaster
+                    response := ResponseData { 
+                        Event : "success",
+                        Msg : "创建成功" , 
+                    }
+                    c.conn.WriteJSON(response)
+                }else {
+                    //如果连接存在的话,检查一下是不是主播断掉然后重连的
+                    if c.hub.rooms[request.RoomId].master == nil {
+                        viewers := c.hub.rooms[request.RoomId].viewer
+                        roomMaster := RoomNumber{master:c.conn,viewer:viewers}
+                        c.hub.rooms[request.RoomId] = roomMaster
+                        response := ResponseData { 
+                            Event : "success",
+                            Msg : "创建成功" , 
+                        }
+                        c.conn.WriteJSON(response)
+                    }else{
+                        response := ResponseData { 
+                            Event : "error",
+                            Msg : "链接已存在" , 
+                        }
+                        c.conn.WriteJSON(response)
+                    }
+                }
             case "location": //用户持续上报位置
                 if rooms,ok := c.hub.rooms[request.RoomId];ok {
+                    //设置最后一次上报的位置
+                    lastLocation := request.Lon+","+request.Lat
+                    SetLastlocation(request.RoomId,lastLocation)
                     fmt.Println("查看一下当前房间的连接数",rooms)
                     for _,viewer := range rooms.viewer {
                         response := ResponseData { 
@@ -175,16 +155,25 @@ func (c *Client) GohomeHub() {
             case "end": //用户主动结束上报回家事件
                 if rooms,ok := c.hub.rooms[request.RoomId]; ok {
                     master := rooms.master
+                    nick,_ := GetNickById(request.Uid)
+                    msg := "您的朋友("+nick+")已平安结束行程"
                     if master != nil {
                         for _,viewer := range rooms.viewer {
                             response := ResponseData { 
                                 Event : "end",
+                                Msg : msg,
                             }
                             viewer.WriteJSON(response)
                         }
                         c.hub.unregister <- c
                         c.conn.Close()
                         delete(c.hub.rooms,request.RoomId)
+                    }else{
+                        response := ResponseData { 
+                            Event : "error",
+                            Msg : "您暂未开始一段行程",
+                        }
+                        c.conn.WriteJSON(response)
                     }
                     fmt.Println("查看每个链接的效果",rooms)
                 }
