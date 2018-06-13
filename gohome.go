@@ -34,6 +34,7 @@ func (c *Client) GohomeHub() {
             break
         }
         cacheKey := "gohome_master_roomid_"+string(request.RoomId)
+        fmt.Println("缓存",cacheKey,request.RoomId,string(request.RoomId))
         switch request.Event {
 			case "create":  //创建一个回家的连接
                 if _,ok := c.hub.rooms[request.RoomId];!ok {
@@ -174,7 +175,6 @@ func (c *Client) GohomeHub() {
                         }
                         c.conn.WriteJSON(response)
                     }
-                    fmt.Println("查看每个链接的效果",rooms)
                 }
         }
         fmt.Println("查看一下现在有多少个房间",c.hub.rooms)
