@@ -69,7 +69,6 @@ func (c *Client) GohomeHub() {
                     lastLocation := request.Lon+","+request.Lat
                     SetLastlocation(request.RoomId,lastLocation)
                     CacheList(cacheKey,lastLocation)
-                    fmt.Println("查看一下当前房间的连接数",rooms)
                     for _,viewer := range rooms.viewer {
                         response := ResponseData { 
                             Event : "location",
@@ -77,7 +76,6 @@ func (c *Client) GohomeHub() {
                             Lon : request.Lon, 
                         }
                         viewer.WriteJSON(response)
-                        fmt.Println("查看每个链接的效果",viewer,"返回的数据")
                     }
                     response := ResponseData { 
                         Event : "success",
@@ -150,9 +148,7 @@ func (c *Client) GohomeHub() {
                             c.hub.unregister <- c 
                             c.conn.Close()
                         }
-                        fmt.Println("查看当前的观众",viewer)    
                     }
-                    fmt.Println("查看每个链接的效果",rooms)
                 }
             case "end": //用户主动结束上报回家事件
                 if rooms,ok := c.hub.rooms[request.RoomId]; ok {
