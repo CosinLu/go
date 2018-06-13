@@ -165,6 +165,7 @@ func (c *Client) GohomeHub() {
                             }
                             viewer.WriteJSON(response)
                         }
+                        EndGohomeCourse(request.RoomId)
                         c.hub.unregister <- c
                         c.conn.Close()
                         delete(c.hub.rooms,request.RoomId)

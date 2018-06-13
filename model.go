@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"database/sql"
 	_"github.com/go-sql-driver/mysql"
+	"time"
 )
 
 //添加最后一次的位置
@@ -37,4 +38,24 @@ func GetNickById(uid int) (nick string,phone string) {
 		nick = "xxx"
 	}
 	return nick,phone
+}
+
+//结束回家进程
+func EndGohomeCourse(id int){
+	db,err := sql.Open("mysql",DBHOST)
+	if err != nil {
+		panic("数据错误")
+	}
+	defer db.Close()
+	endTime := time.Now().Unix()
+	stmt,err := db.Prepare("UPDATE nz_gohome SET status = 1,end_time = ? WHERE id = ?")
+	if err != nil {
+		panic("预定义error")
+	}
+	res,err := stmt.Exec(endTime,id)
+	if err != nil {
+		panic("绑定error")
+	}
+	affect,_ := res.RowsAffected()
+	fmt.Println("修改结果",affect)
 }
