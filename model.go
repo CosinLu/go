@@ -11,16 +11,16 @@ import (
 func SetLastlocation(id int,lastLocation string) {
 	db,err := sql.Open("mysql",DBHOST)
 	if err != nil {
-		panic("链接错误")
+		fmt.Println("SetLastlocation链接错误",err)
 	}
 	defer db.Close()
 	stmt,err := db.Prepare("UPDATE nz_gohome SET last_location = ? WHERE id = ?")
 	if err != nil {
-		panic("预定义error")
+		fmt.Println("SetLastlocation预定义error",err)
 	}
 	res,err := stmt.Exec(lastLocation,id)
 	if err != nil {
-		panic("绑定error")
+		fmt.Println("SetLastlocation绑定error",err)
 	}
 	affect,_ := res.RowsAffected()
 	fmt.Println("修改结果",affect)
@@ -30,7 +30,7 @@ func SetLastlocation(id int,lastLocation string) {
 func GetNickById(uid int) (nick string,phone string) {
 	db,err := sql.Open("mysql",DBHOST)
 	if err != nil {
-		panic("数据错误")
+		fmt.Println("GetNickById链接错误",err)
 	}
 	defer db.Close()
 	err = db.QueryRow("SELECT u_nick,u_phonenum FROM nz_user WHERE u_id = ?",uid).Scan(&nick,&phone)
@@ -44,17 +44,17 @@ func GetNickById(uid int) (nick string,phone string) {
 func EndGohomeCourse(id int){
 	db,err := sql.Open("mysql",DBHOST)
 	if err != nil {
-		panic("数据错误")
+		fmt.Println("EndGohomeCourse链接错误",err)
 	}
 	defer db.Close()
 	endTime := time.Now().Unix()
 	stmt,err := db.Prepare("UPDATE nz_gohome SET status = 1,end_time = ? WHERE id = ?")
 	if err != nil {
-		panic("预定义error")
+		fmt.Println("EndGohomeCourse预定义error",err)
 	}
 	res,err := stmt.Exec(endTime,id)
 	if err != nil {
-		panic("绑定error")
+		fmt.Println("EndGohomeCourse绑定error",err)
 	}
 	affect,_ := res.RowsAffected()
 	fmt.Println("修改结果",affect)
