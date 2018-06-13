@@ -90,3 +90,23 @@ func SetCache(key string,value interface{},expire int64) bool {
 	}
 	return true
 }
+
+//设置redis list 数据
+func CacheList(key string,value string) {
+	c, err := redis.Dial("tcp",REDISHOST)
+	if err != nil {
+		fmt.Println("连接错误",err)
+	}
+	defer c.Close()
+	c.Do("RPUSH",key,value)
+	/* data, err := redis.Int64(c.Do("LLEN", "location"))
+    if err != nil {
+		fmt.Println("err",err)
+    } else {
+		maps, err := redis.Strings(c.Do("LRANGE", "location",0,data))
+		fmt.Println(maps,"err",err,data)
+		for _,v := range maps {
+			fmt.Println("value",v)
+		}
+	} */
+}

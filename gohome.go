@@ -33,6 +33,7 @@ func (c *Client) GohomeHub() {
             }
             break
         }
+        cacheKey := "gohome_master_roomid_"+string(request.RoomId)
         switch request.Event {
 			case "create":  //创建一个回家的连接
                 if _,ok := c.hub.rooms[request.RoomId];!ok {
@@ -67,6 +68,7 @@ func (c *Client) GohomeHub() {
                     //设置最后一次上报的位置
                     lastLocation := request.Lon+","+request.Lat
                     SetLastlocation(request.RoomId,lastLocation)
+                    CacheList(cacheKey,lastLocation)
                     fmt.Println("查看一下当前房间的连接数",rooms)
                     for _,viewer := range rooms.viewer {
                         response := ResponseData { 
