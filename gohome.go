@@ -5,6 +5,7 @@ import (
     "github.com/gorilla/websocket"
     "time"
     "log"
+    "strconv"
 )
 
 func (c *Client) GohomeHub() {
@@ -33,8 +34,8 @@ func (c *Client) GohomeHub() {
             }
             break
         }
-        cacheKey := "gohome_master_roomid_"+string(request.RoomId)
-        fmt.Println("缓存",cacheKey,request.RoomId,string(request.RoomId))
+        cacheKey := "gohome_master_roomid_"+strconv.Itoa(request.RoomId)
+        fmt.Println("缓存",cacheKey)
         switch request.Event {
 			case "create":  //创建一个回家的连接
                 if _,ok := c.hub.rooms[request.RoomId];!ok {
